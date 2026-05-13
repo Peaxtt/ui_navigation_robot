@@ -1,0 +1,32 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# B2 Web RViz — Docker Compose
+#
+# Services:
+#   frontend  — Nginx serving the Vite/R3F build at :3000/app/
+#
+# The FastAPI gateway (b2_web_gateway_node) runs as a ROS 2 node on the host
+# and is NOT containerised here (it needs ROS 2 + hardware access).
+# The frontend proxies API/WS calls to the gateway via GATEWAY_URL.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: b2-web-rviz-frontend:latest
+    container_name: b2_web_rviz_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      # Passed at build time via ARG if you need to bake in a backend URL.
+      # For runtime config the UI auto-detects window.location.
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
