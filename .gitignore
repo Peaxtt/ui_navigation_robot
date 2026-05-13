@@ -1,0 +1,33 @@
+# ── Node ────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+
+# ── Vite build output & cache ────────────────────────────────────────
+frontend/dist/
+frontend/.vite/
+frontend/node_modules/.vite/
+
+# ── Python ──────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# ── ROS / rosbag ────────────────────────────────────────────────────
+info/rosbag2*/
+*.db3
+*.mcap
+
+# ── Environment / secrets ───────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── OS / Editor ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+
+# ── Docker ──────────────────────────────────────────────────────────
+frontend/dist/

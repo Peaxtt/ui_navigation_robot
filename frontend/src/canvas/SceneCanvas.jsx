@@ -409,15 +409,15 @@ function SceneInner() {
           rotation=[-PI/2,0,0] swings drei's default XZ mesh → XY (z=0).
         */}
         <Grid
-          args={[200, 200]}
+          args={[300, 300]}
           cellSize={1}
-          cellColor="#333338"
-          cellThickness={0.5}
+          cellColor="#28283a"
+          cellThickness={0.6}
           sectionSize={5}
-          sectionColor="#4a4a54"
-          sectionThickness={1}
-          fadeDistance={90}
-          fadeStrength={1.2}
+          sectionColor="#005c55"
+          sectionThickness={1.5}
+          fadeDistance={130}
+          fadeStrength={1.0}
           rotation={[-Math.PI / 2, 0, 0]}
         />
         <axesHelper args={[1.5]} />

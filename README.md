@@ -1,6 +1,6 @@
 # B2 Web RViz
 
-Browser-based RViz for the Unitree B2 robot — 3D point cloud, URDF model, Nav2 waypoint control, and live camera feed from a single browser tab.
+Browser-based RViz for the Unitree B2 robot — 3D point cloud, URDF model, Nav2 waypoint control, and live camera feed from a single browser tab. Installable as a PWA on iPad via Safari.
 
 ```
 Browser  ──/app/──→  nginx  ──/api/*──→  ROS 2 gateway :8080
@@ -105,15 +105,24 @@ scp -r dist/* unitree@192.168.123.1:~/b2_web_rviz_ws/src/b2_web_rviz/www/
 
 ```
 .
+├── dev.sh                       ← tmux dev launcher (full / rtsp / front / stop)
+├── docker-compose.yml
+├── .env.example
 ├── frontend/                    ← React + R3F app
 │   ├── Dockerfile
 │   ├── nginx.conf               ← GATEWAY_URL substituted at container start
 │   ├── vite.config.js
+│   ├── index.html               ← PWA meta tags + fonts
+│   ├── public/
+│   │   ├── manifest.json        ← PWA manifest (standalone, iPad installable)
+│   │   ├── icon-192.png
+│   │   ├── icon-512.png
+│   │   └── apple-touch-icon*.png
 │   └── src/
 │       ├── App.jsx
 │       ├── canvas/
-│       │   ├── SceneCanvas.jsx  ← WebGL canvas, camera, waypoint crosshair
-│       │   ├── PointCloud.jsx   ← live scan + map ring buffer
+│       │   ├── SceneCanvas.jsx  ← WebGL canvas, camera, waypoint crosshair, grid
+│       │   ├── PointCloud.jsx   ← live scan + 2D occupancy map (SLAM-style)
 │       │   ├── RobotModel.jsx   ← URDF + joint animation
 │       │   ├── WaypointMarkers.jsx
 │       │   └── NavPlanLine.jsx
@@ -126,20 +135,17 @@ scp -r dist/* unitree@192.168.123.1:~/b2_web_rviz_ws/src/b2_web_rviz/www/
 │       └── store/
 │           └── useRobotStore.js ← Zustand + WebSocket lifecycle
 ├── backend/b2_web_rviz/         ← ROS 2 FastAPI gateway
-├── scripts/
-│   ├── dummy_cam.py             ← MJPEG test camera  :8082/video
-│   ├── dummy_rtsp.py            ← RTSP test camera   rtsp://localhost:8554/front_video
-│   └── launch-browser.sh        ← Chrome with SwiftShader (VM / no-GPU)
-├── dev.sh                       ← tmux dev launcher
-├── docker-compose.yml
-└── .env.example
+└── scripts/
+    ├── dummy_cam.py             ← MJPEG test camera  :8082/video
+    ├── dummy_rtsp.py            ← RTSP test camera   rtsp://localhost:8554/front_video
+    └── launch-browser.sh        ← Chrome with SwiftShader (VM / no-GPU)
 ```
 
 ---
 
 ## Browser Support
 
-Works on any modern browser with WebGL enabled:
+Works on any modern browser with WebGL enabled. Uses `failIfMajorPerformanceCaveat: false` so software rendering (SwiftShader, Mesa) works too.
 
 | Browser | Support |
 |---------|---------|
@@ -148,12 +154,29 @@ Works on any modern browser with WebGL enabled:
 | Firefox 115+ | ✅ |
 | Edge 110+ | ✅ |
 
-**VM / no GPU / remote desktop** — Chrome may need SwiftShader to enable software WebGL:
+**VM / no GPU / remote desktop** — Chrome may need SwiftShader:
 
 ```bash
 ./scripts/launch-browser.sh        # dev  → :5173
 ./scripts/launch-browser.sh prod   # prod → :3000/app/
 ```
+
+---
+
+## iPad — Install as App
+
+Open in Safari → tap **Share** → **Add to Home Screen**
+
+The app opens full-screen (no browser chrome) thanks to the PWA manifest and `apple-mobile-web-app-capable` meta tag.
+
+---
+
+## 3D Map Visualization
+
+`PointCloud.jsx` renders two layers simultaneously:
+
+- **Live scan** — current LiDAR sweep as soft white-cyan dots at real Z height
+- **Occupancy map** — 2D canvas texture that accumulates all scanned wall-height points (0.08–3.0 m) projected onto the ground plane, growing over time like the SLAM `/map` topic in RViz. Transparent in unseen areas (grid shows through), teal where obstacles have been detected.
 
 ---
 
