@@ -10,6 +10,10 @@ import { create } from 'zustand';
 
 const IS_DEV = import.meta.env.DEV;
 
+// Persist theme across sessions and apply class immediately on load
+const _savedTheme = localStorage.getItem('theme') || 'dark';
+if (_savedTheme === 'light') document.body.classList.add('theme-light');
+
 function resolveBackend() {
   return IS_DEV
     ? `${window.location.protocol}//${window.location.hostname}:8080`
@@ -65,6 +69,8 @@ export const useRobotStore = create((set, get) => ({
   addMode: true,
   message: '',
   error: '',
+  showOccupancyMap: true,
+  theme: _savedTheme,
 
   setViewMode: (v) => set({ viewMode: v }),
   setAddMode: (v) => set({ addMode: v }),
@@ -73,6 +79,12 @@ export const useRobotStore = create((set, get) => ({
   setError: (e) => set({ error: e }),
   setRepeatCount: (n) => set({ repeatCount: n }),
   setLiveCfg: (cfg) => set({ liveCfg: cfg }),
+  setShowOccupancyMap: (v) => set({ showOccupancyMap: v }),
+  setTheme: (t) => {
+    localStorage.setItem('theme', t);
+    document.body.classList.toggle('theme-light', t === 'light');
+    set({ theme: t });
+  },
 
   // ── Waypoint helpers (local UI only — POST separately) ───────
   addWaypoint: (wp) => set((s) => ({ waypoints: [...s.waypoints, wp] })),
@@ -96,7 +108,11 @@ export const useRobotStore = create((set, get) => ({
       set({ connected: true });
       statusWs.send('ping');
     };
-    statusWs.onclose = () => set({ connected: false });
+    statusWs.onclose = () => {
+      set({ connected: false });
+      // Auto-reconnect after 4 s (recovers from tab-switch / iOS suspend)
+      setTimeout(() => { if (!get().connected) get().connectWS(); }, 4000);
+    };
     statusWs.onerror = () => set({ connected: false });
     statusWs.onmessage = (ev) => {
       try {

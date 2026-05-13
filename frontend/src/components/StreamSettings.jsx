@@ -2,12 +2,13 @@ import React, { useRef, useState } from 'react';
 import { Settings2 } from 'lucide-react';
 import { useRobotStore } from '../store/useRobotStore';
 
-function SliderRow({ label, value, min, max, step, unit = '', onChange }) {
+function SliderRow({ label, value, min, max, step, unit = '', format, onChange }) {
+  const display = format ? format(value) : value;
   return (
     <div className="slider-row">
       <div className="slider-header">
         <span className="slider-label">{label}</span>
-        <span className="slider-value">{value}{unit}</span>
+        <span className="slider-value">{display}{unit}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={value} onChange={onChange} />
     </div>
@@ -15,10 +16,12 @@ function SliderRow({ label, value, min, max, step, unit = '', onChange }) {
 }
 
 export default function StreamSettings() {
-  const liveCfg    = useRobotStore((s) => s.liveCfg);
-  const setLiveCfg = useRobotStore((s) => s.setLiveCfg);
-  const setError   = useRobotStore((s) => s.setError);
-  const backendUrl = useRobotStore((s) => s.backendUrl);
+  const liveCfg           = useRobotStore((s) => s.liveCfg);
+  const setLiveCfg        = useRobotStore((s) => s.setLiveCfg);
+  const setError          = useRobotStore((s) => s.setError);
+  const backendUrl        = useRobotStore((s) => s.backendUrl);
+  const showOccupancyMap  = useRobotStore((s) => s.showOccupancyMap);
+  const setShowOccupancyMap = useRobotStore((s) => s.setShowOccupancyMap);
 
   const [open, setOpen] = useState(false);
   const pendingRef = useRef({});
@@ -68,8 +71,9 @@ export default function StreamSettings() {
               />
               <SliderRow
                 label="Max points"
-                value={(liveCfg.max_points ?? 80000).toLocaleString()}
+                value={liveCfg.max_points ?? 80000}
                 min="5000" max="200000" step="5000"
+                format={(v) => Number(v).toLocaleString()}
                 onChange={(e) => push({ max_points: Number(e.target.value) })}
               />
               <SliderRow
@@ -99,6 +103,13 @@ export default function StreamSettings() {
                   checked={Boolean(liveCfg.pointcloud_in_robot_frame)}
                   onChange={(e) => push({ pointcloud_in_robot_frame: e.target.checked })} />
                 Cloud in robot frame
+              </label>
+
+              <label className="check-row">
+                <input type="checkbox"
+                  checked={showOccupancyMap}
+                  onChange={(e) => setShowOccupancyMap(e.target.checked)} />
+                Show occupancy map
               </label>
 
               <label className="check-row">

@@ -57,6 +57,35 @@
   --mid:  250ms var(--ease);
 }
 
+/* ── Light theme overrides ──────────────────────────────────── */
+.theme-light {
+  --bg-app:   #f0f2f5;
+  --bg-panel: #ffffff;
+  --bg-card:  #f5f7fa;
+  --bg-input: #eaecf0;
+  --bg-deep:  #e2e5ea;
+
+  --border:     #dde1e8;
+  --border-mid: #c8cdd6;
+  --border-hi:  #adb5c2;
+
+  --text:       #0d0d0f;
+  --text-dim:   #2c2c35;
+  --text-muted: #737380;
+}
+
+/* Hover states use rgba(255,255,255,...) in dark — invert for light */
+.theme-light .card-header:hover                    { background: rgba(0,0,0,0.04); }
+.theme-light .btn:hover:not(:disabled)             { background: rgba(0,0,0,0.06); color: var(--text); }
+.theme-light .toolbar-toggle-btn:hover:not(.active){ background: rgba(0,0,0,0.04); }
+.theme-light .view-toggle-btn:hover:not(.active)   { background: rgba(0,0,0,0.05); }
+.theme-light .wp-card:hover                        { background: rgba(0,0,0,0.03); }
+.theme-light .toolbar-link:hover                   { background: rgba(0,0,0,0.04); }
+.theme-light .toolbar-mode-btn:hover:not(.active)  { background: rgba(0,0,0,0.04); }
+.theme-light .toolbar-toggle-btn.active            { background: var(--bg-card); }
+.theme-light .view-toggle-btn.active               { background: var(--bg-card); }
+.theme-light .panel-toggle-btn:hover               { background: var(--bg-card); }
+
 /* ── Reset ──────────────────────────────────────────────────── */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 html, body, #root { width: 100%; height: 100%; overflow: hidden; }
@@ -202,6 +231,26 @@ body {
 
 .toolbar-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 
+.toolbar-theme-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--fast);
+  flex-shrink: 0;
+}
+.toolbar-theme-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
 .toolbar-link {
   display: flex;
   align-items: center;
@@ -265,13 +314,18 @@ body {
   flex-direction: column;
   background: var(--bg-panel);
   border-left: 1px solid var(--border);
+  min-height: 0;
   overflow: hidden;
 }
 
 .panel-scroll {
   flex: 1;
+  min-height: 0;                      /* CRITICAL: lets flex child honour overflow */
   overflow-y: auto;
   overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -290,6 +344,7 @@ body {
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  flex-shrink: 0;  /* must not shrink — panel-scroll handles overflow */
 }
 
 .card-header {

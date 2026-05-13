@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, Wifi, WifiOff, LayoutDashboard, MapPin, Move, ArrowLeft } from 'lucide-react';
+import { Bot, Wifi, WifiOff, LayoutDashboard, MapPin, Move, ArrowLeft, Sun, Moon } from 'lucide-react';
 import { useRobotStore } from '../store/useRobotStore';
 
 export default function Toolbar({ onBack }) {
@@ -7,10 +7,12 @@ export default function Toolbar({ onBack }) {
   const connected  = useRobotStore((s) => s.connected);
   const addMode    = useRobotStore((s) => s.addMode);
   const viewMode   = useRobotStore((s) => s.viewMode);
+  const theme      = useRobotStore((s) => s.theme);
   const setBackendUrl = useRobotStore((s) => s.setBackendUrl);
   const connectWS     = useRobotStore((s) => s.connectWS);
   const setAddMode    = useRobotStore((s) => s.setAddMode);
   const setViewMode   = useRobotStore((s) => s.setViewMode);
+  const setTheme      = useRobotStore((s) => s.setTheme);
 
   return (
     <div className="toolbar">
@@ -87,6 +89,15 @@ export default function Toolbar({ onBack }) {
       </div>
 
       <div className="toolbar-actions">
+        <button
+          type="button"
+          className="toolbar-theme-btn"
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+        >
+          {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+        </button>
+
         <div className={`conn-pill ${connected ? 'connected' : 'disconnected'}`}>
           <div className="conn-dot" />
           {connected

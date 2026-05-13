@@ -216,9 +216,10 @@ function GroundPlaneHitTarget() {
       onPointerLeave={onLeave}
       renderOrder={-1}
     >
-      {/* XY plane at z=0 (no rotation), invisible but fully raycastable */}
+      {/* XY plane at z=0 (no rotation), invisible but fully raycastable.
+          depthWrite=false prevents depth-buffer interference with the Grid. */}
       <planeGeometry args={[500, 500]} />
-      <meshBasicMaterial side={THREE.DoubleSide} transparent opacity={0} />
+      <meshBasicMaterial side={THREE.DoubleSide} transparent opacity={0} depthWrite={false} />
     </mesh>
   );
 }
@@ -377,6 +378,7 @@ class WebGLErrorBoundary extends Component {
 function SceneInner() {
   const addMode  = useRobotStore((s) => s.addMode);
   const viewMode = useRobotStore((s) => s.viewMode);
+  const theme    = useRobotStore((s) => s.theme);
   const [ctxLost, setCtxLost] = useState(false);
 
   const handleCreated = useCallback(({ gl }) => {
@@ -397,7 +399,7 @@ function SceneInner() {
         performance={{ min: 0.5 }}
         onCreated={handleCreated}
       >
-        <color attach="background" args={['#121212']} />
+        <color attach="background" args={[theme === 'light' ? '#d8dce6' : '#121212']} />
         <hemisphereLight args={[0xffffff, 0x222222, 1.2]} />
         <directionalLight position={[5, 5, 20]} intensity={0.35} />
 
@@ -411,14 +413,15 @@ function SceneInner() {
         <Grid
           args={[300, 300]}
           cellSize={1}
-          cellColor="#28283a"
-          cellThickness={0.6}
+          cellColor="#505060"
+          cellThickness={0.8}
           sectionSize={5}
-          sectionColor="#005c55"
-          sectionThickness={1.5}
-          fadeDistance={130}
-          fadeStrength={1.0}
-          rotation={[-Math.PI / 2, 0, 0]}
+          sectionColor="#606070"
+          sectionThickness={1.2}
+          fadeDistance={150}
+          fadeStrength={0.8}
+          renderOrder={2}
+          rotation={[Math.PI / 2, 0, 0]}
         />
         <axesHelper args={[1.5]} />
 
@@ -446,7 +449,8 @@ function SceneInner() {
           enableDamping
           dampingFactor={0.08}
           screenSpacePanning
-          maxPolarAngle={Math.PI / 2}
+          minPolarAngle={0}
+          maxPolarAngle={viewMode === 'top' ? 0 : Math.PI / 2}
           mouseButtons={
             addMode
               ? { LEFT: undefined, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
