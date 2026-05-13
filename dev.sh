@@ -2,7 +2,8 @@
 # ══════════════════════════════════════════════════════════════════
 #  B2 Web RViz — Dev / Test launcher
 #
-#  ./dev.sh              →  4-pane: frontend + backend + rosbag + dummy cam
+#  ./dev.sh              →  4-pane: frontend + backend + rosbag + dummy MJPEG cam
+#  ./dev.sh rtsp         →  same, but dummy cam uses GStreamer RTSP instead of MJPEG
 #  ./dev.sh front        →  frontend + dummy cam only (no ROS2 required)
 #  ./dev.sh stop         →  ปิด session ทั้งหมด
 #
@@ -15,6 +16,17 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 WS_DIR="${ROS2_WS:-$HOME/b2_web_rviz_ws}"
 ROSBAG="$ROOT/info/rosbag2_2026_05_09-20_55_21"
 MODE="${1:-full}"
+
+# Camera URL used by the backend pane
+# MJPEG mode  → http://localhost:8082/video   (default, plain OpenCV)
+# RTSP mode   → rtsp://localhost:8554/front_video  (GStreamer)
+if [ "$MODE" = "rtsp" ]; then
+  CAM_URL="rtsp://localhost:8554/front_video"
+  CAM_CMD="python3 '$ROOT/scripts/dummy_rtsp.py'"
+else
+  CAM_URL="http://localhost:8082/video"
+  CAM_CMD="python3 '$ROOT/scripts/dummy_cam.py'"
+fi
 
 # ── stop ──────────────────────────────────────────────────────────
 if [ "$MODE" = "stop" ]; then
@@ -32,7 +44,7 @@ if [ "$MODE" = "front" ]; then
   tmux split-window -h -t "$SESSION:0.0" -p 35
 
   tmux send-keys -t "$SESSION:0.0" "cd '$ROOT/frontend' && npm run dev" Enter
-  tmux send-keys -t "$SESSION:0.1" "python3 '$ROOT/scripts/dummy_cam.py'" Enter
+  tmux send-keys -t "$SESSION:0.1" "$CAM_CMD" Enter
 
   tmux select-pane -t "$SESSION:0.0"
   echo ""
@@ -103,7 +115,7 @@ source /opt/ros/humble/setup.bash && \
 source '$WS_DIR/install/setup.bash' && \
 ros2 launch b2_web_rviz b2_web_gateway.launch.py \
   web_port:=8080 \
-  rtsp_url:=http://localhost:8082/video \
+  rtsp_url:=$CAM_URL \
   video_enabled:=true \
   use_bundled_b2_urdf:=true
 " Enter
@@ -116,9 +128,8 @@ echo '▶  Playing rosbag (loop)...' && \
 ros2 bag play '$ROSBAG' --loop --clock
 " Enter
 
-# ── Pane 3 (ล่างขวา): dummy camera MJPEG ──────────────────────────
-tmux send-keys -t "$SESSION:0.3" \
-  "python3 '$ROOT/scripts/dummy_cam.py'" Enter
+# ── Pane 3 (ล่างขวา): dummy camera (MJPEG หรือ RTSP) ──────────────
+tmux send-keys -t "$SESSION:0.3" "$CAM_CMD" Enter
 
 # โฟกัสที่ frontend
 tmux select-pane -t "$SESSION:0.0"
@@ -127,7 +138,7 @@ echo ""
 echo "  Session : $SESSION"
 echo "  Frontend: http://localhost:5173"
 echo "  Backend : http://localhost:8080/app/"
-echo "  Cam feed: http://localhost:8082/video"
+echo "  Cam URL : $CAM_URL"
 echo ""
 echo "  สลับ pane : Ctrl+B แล้วกดลูกศร"
 echo "  ปิดทั้งหมด: ./dev.sh stop"

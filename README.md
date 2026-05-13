@@ -1,13 +1,10 @@
-# B2 Web RViz — Frontend
+# B2 Web RViz
 
-Browser-based RViz replacement for the Unitree B2 quadruped robot.
-Built with React Three Fiber — serves a full 3D point cloud viewer, URDF robot model, and Nav2 waypoint control from a single browser tab.
+Browser-based RViz for the Unitree B2 robot — 3D point cloud, URDF model, Nav2 waypoint control, and live camera feed from a single browser tab.
 
 ```
-Browser  ──/app/──→  nginx (Docker :3000)
-                         │
-                  proxy /api/*  ──→  ROS 2 gateway (robot :8080)
-                  proxy /ws/*   ──→  ROS 2 gateway (robot :8080)
+Browser  ──/app/──→  nginx  ──/api/*──→  ROS 2 gateway :8080
+                            ──/ws/* ──→  ROS 2 gateway :8080
 ```
 
 ---
@@ -27,58 +24,47 @@ Browser  ──/app/──→  nginx (Docker :3000)
 
 ---
 
-## Prerequisites
-
-- **Docker + Docker Compose** (for production)
-- **Node.js 22+** (for local development only)
-- Robot running the ROS 2 gateway on port `8080`
-
----
-
 ## Quick Start (Development)
 
 ```bash
 cd frontend
 npm install
-npm run dev
-# → http://localhost:5173
+npm run dev        # → http://localhost:5173
 ```
 
-Vite proxies `/api/*` and `/ws/*` to `http://localhost:8080` in dev mode.
-The robot (or `dev.sh` with rosbag) must be running and reachable at that address.
+Vite proxies `/api/*` and `/ws/*` to `http://localhost:8080` automatically.
 
-### dev.sh — full local simulation (requires ROS 2 Humble)
+### dev.sh — full local stack in tmux
 
 ```bash
-./dev.sh          # 4-pane tmux: Vite + ROS2 gateway + rosbag + dummy cam
-./dev.sh front    # frontend + dummy cam only — no ROS 2 needed
-./dev.sh stop     # kill session
+./dev.sh           # Vite + ROS 2 gateway + rosbag + dummy MJPEG camera
+./dev.sh rtsp      # same, but dummy camera uses GStreamer RTSP instead of MJPEG
+./dev.sh front     # frontend + dummy camera only (no ROS 2 needed)
+./dev.sh stop      # kill tmux session
 ```
 
 | URL | Service |
 |-----|---------|
 | `http://localhost:5173` | Vite dev server (hot-reload) |
-| `http://localhost:8080/app/` | Production build via ROS 2 gateway |
-| `http://localhost:8082/video` | Dummy MJPEG camera |
+| `http://localhost:8080/app/` | Production build served by gateway |
+| `http://localhost:8082/video` | Dummy MJPEG camera (default mode) |
+| `rtsp://localhost:8554/front_video` | Dummy RTSP camera (`rtsp` mode) |
 
 ---
 
 ## Docker (Production)
 
-### 1. Configure environment
+### 1. Configure
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env`:
+`.env` defaults:
 
 ```env
-# URL of the ROS 2 gateway on the robot
-GATEWAY_URL=http://192.168.123.1:8080
-
-# Host port for the frontend container (default 3000)
-FRONTEND_PORT=3000
+GATEWAY_URL=http://192.168.123.1:8080   # ROS 2 gateway on the robot
+FRONTEND_PORT=3000                       # host port
 ```
 
 ### 2. Build and start
@@ -87,7 +73,7 @@ FRONTEND_PORT=3000
 docker compose up -d --build
 ```
 
-nginx starts, reads `GATEWAY_URL` from the environment, and proxies all `/api/*` and `/ws/*` requests to the robot automatically.
+nginx reads `GATEWAY_URL` at container start and proxies `/api/*` and `/ws/*` — no rebuild needed when changing the robot IP.
 
 ### 3. Access
 
@@ -96,18 +82,9 @@ Open `http://<your-pc-ip>:3000/app/` in the browser.
 ### Other Docker commands
 
 ```bash
-# Rebuild image after code changes
-docker compose build --no-cache
-
-# View logs
-docker compose logs -f frontend
-
-# Stop
-docker compose down
-
-# Run a one-off build without compose
-docker build -t b2-web-rviz-frontend ./frontend
-docker run -e GATEWAY_URL=http://192.168.123.1:8080 -p 3000:80 b2-web-rviz-frontend
+docker compose build --no-cache   # rebuild after code changes
+docker compose logs -f frontend   # view logs
+docker compose down               # stop
 ```
 
 ---
@@ -115,76 +92,74 @@ docker run -e GATEWAY_URL=http://192.168.123.1:8080 -p 3000:80 b2-web-rviz-front
 ## Manual Build (without Docker)
 
 ```bash
-cd frontend
-npm install
-npm run build
-# dist/ is the production bundle (base path /app/)
-```
+cd frontend && npm install && npm run build
+# dist/ → production bundle (base path /app/)
 
-Copy `dist/` to wherever nginx or the ROS 2 gateway serves static files:
-
-```bash
-# Serve via the ROS 2 gateway on the robot
+# Copy to robot
 scp -r dist/* unitree@192.168.123.1:~/b2_web_rviz_ws/src/b2_web_rviz/www/
 ```
 
 ---
 
-## Project Structure (frontend/)
+## Project Structure
 
 ```
-frontend/
-├── Dockerfile               ← node:22 build → nginx:1.27 serve
-├── nginx.conf               ← nginx template (GATEWAY_URL substituted at start)
-├── vite.config.js           ← base: /app/ in prod, dev proxy → :8080
-├── package.json
-└── src/
-    ├── App.jsx
-    ├── style.css
-    ├── canvas/              ← React Three Fiber 3D scene
-    │   ├── SceneCanvas.jsx  ← Canvas, camera, ground plane, crosshair
-    │   ├── PointCloud.jsx   ← Dual-layer live scan + map ring buffer
-    │   ├── RobotModel.jsx   ← URDF + joint animation
-    │   ├── WaypointMarkers.jsx
-    │   └── NavPlanLine.jsx
-    ├── components/          ← React UI panels
-    │   ├── Toolbar.jsx
-    │   ├── ControlPanel.jsx
-    │   ├── WaypointList.jsx
-    │   ├── CameraFeed.jsx
-    │   └── StreamSettings.jsx
-    └── store/
-        └── useRobotStore.js ← Zustand store + WebSocket lifecycle
+.
+├── frontend/                    ← React + R3F app
+│   ├── Dockerfile
+│   ├── nginx.conf               ← GATEWAY_URL substituted at container start
+│   ├── vite.config.js
+│   └── src/
+│       ├── App.jsx
+│       ├── canvas/
+│       │   ├── SceneCanvas.jsx  ← WebGL canvas, camera, waypoint crosshair
+│       │   ├── PointCloud.jsx   ← live scan + map ring buffer
+│       │   ├── RobotModel.jsx   ← URDF + joint animation
+│       │   ├── WaypointMarkers.jsx
+│       │   └── NavPlanLine.jsx
+│       ├── components/
+│       │   ├── Toolbar.jsx
+│       │   ├── ControlPanel.jsx
+│       │   ├── WaypointList.jsx
+│       │   ├── CameraFeed.jsx   ← MJPEG stream from /api/video_feed
+│       │   └── StreamSettings.jsx
+│       └── store/
+│           └── useRobotStore.js ← Zustand + WebSocket lifecycle
+├── backend/b2_web_rviz/         ← ROS 2 FastAPI gateway
+├── scripts/
+│   ├── dummy_cam.py             ← MJPEG test camera  :8082/video
+│   ├── dummy_rtsp.py            ← RTSP test camera   rtsp://localhost:8554/front_video
+│   └── launch-browser.sh        ← Chrome with SwiftShader (VM / no-GPU)
+├── dev.sh                       ← tmux dev launcher
+├── docker-compose.yml
+└── .env.example
 ```
 
 ---
 
-## Configuration
+## Browser Support
 
-### Backend URL resolution
+Works on any modern browser with WebGL enabled:
 
-`useRobotStore.js` auto-resolves the backend URL:
+| Browser | Support |
+|---------|---------|
+| Chrome 110+ | ✅ PC + Android |
+| Safari 15+ | ✅ iPad / iPhone / Mac |
+| Firefox 115+ | ✅ |
+| Edge 110+ | ✅ |
 
-| Mode | Resolution |
-|------|-----------|
-| Dev (`npm run dev`) | `window.location.hostname + :8080` |
-| Production | `window.location.origin` (same origin → nginx proxy) |
+**VM / no GPU / remote desktop** — Chrome may need SwiftShader to enable software WebGL:
 
-With Docker, nginx handles the proxy so the frontend always hits the same origin. No URL configuration needed in the UI.
-
-### Runtime override (without rebuild)
-
-The **Stream Settings** panel in the UI has a **Gateway URL** field. Changing it reconnects the WebSocket and REST calls to the new address immediately — no page reload needed.
+```bash
+./scripts/launch-browser.sh        # dev  → :5173
+./scripts/launch-browser.sh prod   # prod → :3000/app/
+```
 
 ---
 
-## WebSocket & API Contract
-
-The frontend expects the ROS 2 gateway at `GATEWAY_URL` to expose:
+## API Contract
 
 ### WebSocket `/ws/status` (~10 Hz)
-
-JSON object pushed from server:
 
 ```json
 {
@@ -205,38 +180,18 @@ Binary frame: `[UTF-8 JSON header]\n[Float32Array XYZ]`
 { "count": 12000, "in_robot_frame": false }
 ```
 
-followed by `count × 3` float32 values.
-
 ### REST
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `GET/POST` | `/api/config` | Stream settings (live) |
+| `GET` | `/api/robot_description` | URDF XML |
+| `GET` | `/api/video_feed` | MJPEG stream from RTSP camera |
+| `GET` | `/api/video_snapshot` | Single JPEG frame |
 | `POST` | `/api/waypoints` | `{ waypoints: [{x,y,z,yaw}] }` |
 | `POST` | `/api/navigation/start` | `{ repeat_count: N }` |
 | `POST` | `/api/navigation/cancel` | Cancel Nav2 |
 | `POST` | `/api/navigation/clear` | Clear waypoints |
-| `GET` | `/api/video_feed` | MJPEG stream |
-| `GET` | `/api/robot_description` | URDF XML |
-| `GET/POST` | `/api/config` | Stream config |
-
----
-
-## Browser Requirements
-
-Any modern browser (Chrome 110+, Firefox 115+, Edge 110+) with WebGL enabled.
-
-**VM / remote desktop / no GPU:** launch Chrome with software rendering:
-
-```bash
-./scripts/launch-browser.sh          # dev  → :5173
-./scripts/launch-browser.sh prod     # prod → :3000/app/
-```
-
-Or manually:
-
-```bash
-google-chrome --use-gl=swiftshader --ignore-gpu-blocklist http://localhost:3000/app/
-```
 
 ---
 
@@ -246,21 +201,53 @@ google-chrome --use-gl=swiftshader --ignore-gpu-blocklist http://localhost:3000/
 
 | Button | Action |
 |--------|--------|
-| `⊞ Top` / `◈ 3D` | Switch camera view |
-| `Placing Waypoints` (teal) | Click-drag on map to add waypoints with yaw |
-| `Navigate` (grey) | Camera-only pan/orbit — no waypoints placed |
+| `Top` / `3D` | Switch camera view |
+| `Placing Waypoints` | Click-drag to place waypoint + heading |
+| `Navigate` | Orbit/pan only |
 
-### Waypoint placement (RViz-style)
+### Waypoint placement
 
-1. Switch to **Placing Waypoints** mode.
-2. **Click and hold** on the ground plane.
-3. **Drag** to set heading direction (preview arrow appears).
-4. **Release** to confirm.
-5. Press **Escape** or right-click to cancel.
+1. Switch to **Placing Waypoints** mode
+2. **Click and hold** on the map
+3. **Drag** to set heading (arrow preview appears)
+4. **Release** to confirm — press **Esc** or right-click to cancel
+
+### Camera feed
+
+Live MJPEG from the robot's front camera via `/api/video_feed`.  
+Requires `video_enabled:=true` and a valid `rtsp_url` on the ROS 2 gateway.  
+For development use `./dev.sh` (or `./dev.sh rtsp` for GStreamer testing).
 
 ### Control Panel
 
-- **Status** — pose (x, y, yaw), connection status
-- **Navigation** — waypoint list, start/cancel/clear, repeat count
-- **Camera** — live MJPEG feed
-- **Stream** — Gateway URL override, camera settings
+- **Status** — pose (x, y, yaw), connection
+- **Navigation** — waypoint list, start / cancel / clear, repeat count
+- **Camera** — live feed + snapshot
+- **Stream** — Gateway URL override, point cloud settings
+
+---
+
+## Backend — Camera Setup
+
+The ROS 2 gateway streams RTSP to the browser as MJPEG. Requires `opencv-python-headless`:
+
+```bash
+pip install opencv-python-headless
+```
+
+Launch parameters:
+
+```bash
+ros2 launch b2_web_rviz b2_web_gateway.launch.py \
+  rtsp_url:=rtsp://192.168.123.161:8551/front_video \
+  video_enabled:=true \
+  video_quality:=75 \
+  video_fps_limit:=15.0
+```
+
+For GStreamer RTSP support (low latency):
+
+```bash
+sudo apt install python3-opencv gstreamer1.0-plugins-good \
+                 gstreamer1.0-plugins-bad gstreamer1.0-libav
+```

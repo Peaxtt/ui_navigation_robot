@@ -355,36 +355,19 @@ function CrosshairMarker() {
 }
 
 // ── WebGL error boundary ──────────────────────────────────────────────────────
+// Catches renderer creation failures silently — shows a dark placeholder so the
+// rest of the UI (panel, camera feed, navigation) keeps working.
 class WebGLErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { failed: false, msg: '' };
+    this.state = { failed: false };
   }
-  static getDerivedStateFromError(err) {
-    return { failed: true, msg: err?.message ?? String(err) };
+  static getDerivedStateFromError() {
+    return { failed: true };
   }
   render() {
     if (this.state.failed) {
-      return (
-        <div className="viewer" style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center',
-          justifyContent: 'center', gap: 12, color: '#888', fontSize: 13,
-        }}>
-          <div style={{ fontSize: 32 }}>⚠️</div>
-          <div style={{ color: '#e55', fontWeight: 600 }}>WebGL unavailable</div>
-          <div style={{ maxWidth: 360, textAlign: 'center', lineHeight: 1.7 }}>
-            GPU hardware acceleration is disabled.<br />
-            Run: <code style={{ background: '#222', padding: '2px 7px', borderRadius: 4 }}>
-              ./scripts/launch-browser.sh
-            </code><br />
-            or open Chrome with{' '}
-            <code style={{ background: '#222', padding: '2px 7px', borderRadius: 4 }}>
-              --use-gl=swiftshader
-            </code>
-          </div>
-          <div style={{ color: '#444', fontSize: 11, marginTop: 4 }}>{this.state.msg}</div>
-        </div>
-      );
+      return <div className="viewer" style={{ background: '#121212' }} />;
     }
     return this.props.children;
   }
@@ -397,7 +380,6 @@ function SceneInner() {
   const [ctxLost, setCtxLost] = useState(false);
 
   const handleCreated = useCallback(({ gl }) => {
-    gl.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     const canvas = gl.domElement;
     canvas.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
@@ -410,7 +392,9 @@ function SceneInner() {
     <div className={`viewer${addMode ? ' add-mode' : ''}`}>
       <Canvas
         camera={{ position: [-0.01, 0, 22], up: [0, 0, 1], fov: 60, near: 0.05, far: 2000 }}
-        gl={{ antialias: true, failIfMajorPerformanceCaveat: false, powerPreference: 'high-performance' }}
+        gl={{ antialias: true, failIfMajorPerformanceCaveat: false }}
+        dpr={[1, 2]}
+        performance={{ min: 0.5 }}
         onCreated={handleCreated}
       >
         <color attach="background" args={['#121212']} />

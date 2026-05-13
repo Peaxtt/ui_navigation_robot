@@ -41,7 +41,7 @@ import rclpy
 from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from geometry_msgs.msg import PoseStamped
 from nav2_msgs.action import FollowWaypoints
@@ -77,6 +77,151 @@ except ImportError:
 
     def _json_loads(s):
         return json.loads(s)
+
+# ── Optional camera support (opencv-python-headless) ─────────────────────────
+try:
+    import cv2 as _cv2
+    _HAS_CV2 = True
+except ImportError:
+    _cv2 = None  # type: ignore
+    _HAS_CV2 = False
+
+_PLACEHOLDER_JPEG: Optional[bytes] = None
+
+
+def _make_placeholder_jpeg() -> bytes:
+    """Color-bar JPEG placeholder — served when RTSP stream is unavailable."""
+    global _PLACEHOLDER_JPEG
+    if _PLACEHOLDER_JPEG is not None:
+        return _PLACEHOLDER_JPEG
+    if _HAS_CV2:
+        import numpy as np
+        h, w = 240, 320
+        img = np.zeros((h, w, 3), dtype=np.uint8)
+        colors = [
+            (0, 0, 192), (0, 192, 192), (0, 192, 0),
+            (192, 192, 0), (192, 0, 0), (192, 0, 192), (64, 64, 64),
+        ]
+        sw = w // len(colors)
+        for i, c in enumerate(colors):
+            img[:, i * sw:(i + 1) * sw] = c
+        _cv2.putText(img, "NO SIGNAL", (70, 130), _cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
+        _, buf = _cv2.imencode(".jpg", img, [_cv2.IMWRITE_JPEG_QUALITY, 60])
+        _PLACEHOLDER_JPEG = buf.tobytes()
+    else:
+        # Minimal 1×1 gray JPEG (no cv2 dependency)
+        _PLACEHOLDER_JPEG = (
+            b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
+            b"\xff\xdb\x00C\x00\x10\x0b\x0c\x0e\x0c\n\x10\x0e\r\x0e\x12\x11\x10"
+            b"\x13\x18(\x1a\x18\x16\x16\x18\x310#&\')*3/1,3(((0<;@>3@(((4D6EKL"
+            b"GJMGIJ\xff\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00\xff\xc4"
+            b"\x00\x1f\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00"
+            b"\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\xff\xc4\x00"
+            b"\xb5\x10\x00\x02\x01\x03\x03\x02\x04\x03\x05\x05\x04\x04\x00\x00\x01"
+            b"}\x01\x02\x03\x00\x04\x11\x05\x12!1A\x06\x13Qa\x07\"q\x142\x81\x91"
+            b"\xa1\x08#B\xb1\xc1\x15R\xd1\xf0\xff\xda\x00\x08\x01\x01\x00\x00?\x00"
+            b"\xf5\x00\x00\x00\x00\x00\x00\x00\x00\xff\xd9"
+        )
+    return _PLACEHOLDER_JPEG
+
+
+class VideoStreamer:
+    """RTSP → MJPEG bridge with GStreamer-backed capture and auto-reconnect.
+
+    Uses a background thread so frame acquisition never blocks the asyncio loop.
+    Callers call latest_jpeg() from any thread; the lock is kept for <1 µs.
+    """
+
+    def __init__(self, url: str, quality: int = 75, fps_limit: float = 15.0):
+        self.url = url
+        self.quality = min(100, max(1, int(quality)))
+        self._min_dt = 1.0 / max(0.5, float(fps_limit))
+        self._frame: bytes = b""
+        self._lock = threading.Lock()
+        self._running = False
+        self._thread: Optional[threading.Thread] = None
+        self._connected = False
+
+    @property
+    def connected(self) -> bool:
+        return self._connected
+
+    def start(self) -> None:
+        if not _HAS_CV2:
+            return
+        self._running = True
+        self._thread = threading.Thread(
+            target=self._capture_loop, daemon=True, name="video-capture"
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._running = False
+
+    def latest_jpeg(self) -> bytes:
+        with self._lock:
+            if self._frame:
+                return self._frame
+        return _make_placeholder_jpeg()
+
+    def _open_capture(self):
+        """Try GStreamer uridecodebin pipeline first (low latency); fall back to default."""
+        if self.url.startswith("rtsp://"):
+            pipeline = (
+                f"uridecodebin uri={self.url} latency=0 ! "
+                "videoconvert ! video/x-raw,format=BGR ! "
+                "appsink max-buffers=1 drop=true sync=false"
+            )
+            cap = _cv2.VideoCapture(pipeline, _cv2.CAP_GSTREAMER)
+            if cap.isOpened():
+                return cap
+            cap.release()
+        # Fallback: let OpenCV/FFmpeg handle it
+        cap = _cv2.VideoCapture(self.url)
+        cap.set(_cv2.CAP_PROP_BUFFERSIZE, 1)
+        cap.set(_cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)
+        cap.set(_cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)
+        return cap
+
+    def _capture_loop(self) -> None:
+        backoff = 1.0
+        encode_params = [_cv2.IMWRITE_JPEG_QUALITY, self.quality]
+        while self._running:
+            cap = None
+            try:
+                cap = self._open_capture()
+                if not cap.isOpened():
+                    raise OSError("stream not opened")
+                self._connected = True
+                backoff = 1.0
+                last_t = 0.0
+                while self._running:
+                    dt = self._min_dt - (time.monotonic() - last_t)
+                    if dt > 0:
+                        time.sleep(dt)
+                    ok, frame = cap.read()
+                    if not ok:
+                        break
+                    last_t = time.monotonic()
+                    _, buf = _cv2.imencode(".jpg", frame, encode_params)
+                    with self._lock:
+                        self._frame = buf.tobytes()
+            except Exception:
+                pass
+            finally:
+                self._connected = False
+                if cap is not None:
+                    try:
+                        cap.release()
+                    except Exception:
+                        pass
+            if self._running:
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 30.0)
+
+
+VIDEO_STREAMER: Optional[VideoStreamer] = None
+_MJPEG_PART_HEADER = b"--mjpeg\r\nContent-Type: image/jpeg\r\n\r\n"
 
 POINTCLOUD_HEADER_VERSION = 1
 STATUS_VERSION = 1
@@ -386,11 +531,37 @@ _UI_STATIC_MOUNTED = False
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
+    global VIDEO_STREAMER
     STATE.loop = asyncio.get_running_loop()
     _try_mount_ui()
+
+    # Start video streamer if enabled (reads params from ROS node)
+    if ROS_NODE is not None:
+        try:
+            vid_enabled = _param_bool(ROS_NODE.get_parameter("video_enabled").value, True)
+            if vid_enabled:
+                rtsp_url = str(ROS_NODE.get_parameter("rtsp_url").value or "")
+                quality   = int(ROS_NODE.get_parameter("video_quality").value)
+                fps_limit = float(ROS_NODE.get_parameter("video_fps_limit").value)
+                if rtsp_url:
+                    VIDEO_STREAMER = VideoStreamer(rtsp_url, quality=quality, fps_limit=fps_limit)
+                    VIDEO_STREAMER.start()
+                    if _HAS_CV2:
+                        ROS_NODE.get_logger().info(f"Video streamer: {rtsp_url} @ {fps_limit} fps Q{quality}")
+                    else:
+                        ROS_NODE.get_logger().warning(
+                            "video_enabled=true but opencv-python-headless not installed — "
+                            "install with: pip install opencv-python-headless"
+                        )
+        except Exception as exc:
+            if ROS_NODE is not None:
+                ROS_NODE.get_logger().warning(f"Video streamer init failed: {exc}")
+
     try:
         yield
     finally:
+        if VIDEO_STREAMER is not None:
+            VIDEO_STREAMER.stop()
         # Drain & close all WS writer tasks so uvicorn shuts down quickly
         await _close_all_ws_clients()
         # Stop any launched processes so we don't leave Nav2 / launches orphaned
@@ -519,7 +690,8 @@ def pointcloud2_to_xyz_array(
 
     mask = np.isfinite(arr).all(axis=1)
     if range_limit > 0:
-        mask &= np.linalg.norm(arr[:, :2], axis=1) <= range_limit
+        # sqrt-free: compare squared distance to avoid sqrt() on every point
+        mask &= (arr[:, 0] ** 2 + arr[:, 1] ** 2) <= (range_limit * range_limit)
     mask &= (arr[:, 2] >= z_min) & (arr[:, 2] <= z_max)
     arr = arr[mask]
 
@@ -543,9 +715,11 @@ def transform_xyz_points(points: np.ndarray, tf_msg) -> np.ndarray:
     n = points.shape[0]
     if n == 0:
         return points
-    ph = np.concatenate([points.astype(np.float64), np.ones((n, 1), dtype=np.float64)], axis=1)
-    out = (mat @ ph.T).T[:, :3].astype(np.float32, copy=False)
-    return out
+    # Float32 rotation+translation — avoids (N,4) concatenation and float64 upcast.
+    # Point cloud accuracy at float32 is ~1 mm at 100 m; sufficient for a quadruped.
+    rot32   = mat[:3, :3].astype(np.float32)
+    trans32 = mat[:3, 3].astype(np.float32)
+    return (points @ rot32.T) + trans32
 
 
 def _normalize_pkg_relative_path(filepath: str) -> str:
@@ -678,6 +852,10 @@ class B2WebGateway(Node):
         self.declare_parameter("use_bundled_b2_urdf", True)
         self.declare_parameter("process_manifest_file", "")
         self.declare_parameter("process_log_buffer", 500)
+        self.declare_parameter("video_enabled", True)
+        self.declare_parameter("rtsp_url", "rtsp://192.168.123.161:8551/front_video")
+        self.declare_parameter("video_quality", 75)
+        self.declare_parameter("video_fps_limit", 15.0)
 
         self.pointcloud_topic = self.get_parameter("pointcloud_topic").value
         self.fixed_frame = self.get_parameter("fixed_frame").value
@@ -1892,6 +2070,37 @@ async def api_clear_waypoints():
         STATE.waypoints = []
         STATE.latest_plan = None
     return {"ok": True}
+
+
+@app.get("/api/video_feed")
+async def api_video_feed():
+    """MJPEG multipart stream from the RTSP camera.
+
+    Clients should set src/img.src to this URL.
+    Boundary: mjpeg  (multipart/x-mixed-replace; boundary=mjpeg)
+    """
+    if VIDEO_STREAMER is None:
+        raise HTTPException(status_code=503, detail="Video not enabled (video_enabled:=false or rtsp_url not set)")
+
+    async def _generator():
+        fps_limit = VIDEO_STREAMER._min_dt
+        while True:
+            frame = VIDEO_STREAMER.latest_jpeg()
+            yield _MJPEG_PART_HEADER + frame + b"\r\n"
+            await asyncio.sleep(fps_limit)
+
+    return StreamingResponse(
+        _generator(),
+        media_type="multipart/x-mixed-replace; boundary=mjpeg",
+    )
+
+
+@app.get("/api/video_snapshot")
+async def api_video_snapshot():
+    """Single JPEG frame — for polling or img src fallback."""
+    if VIDEO_STREAMER is None:
+        raise HTTPException(status_code=503, detail="Video not enabled")
+    return Response(content=VIDEO_STREAMER.latest_jpeg(), media_type="image/jpeg")
 
 
 async def _run_ws_client(ws: WebSocket, kind: str, queue_size: int, clients: List[WSClient]) -> None:

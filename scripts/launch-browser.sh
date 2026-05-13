@@ -24,8 +24,9 @@ fi
 #   --disable-gpu-process-crash-limit → ไม่จำกัดจำนวนครั้งที่ GPU process restart
 #   --disable-background-timer-throttling → ไม่ลด framerate ตอน tab background
 CHROME_FLAGS=(
-  --use-gl=swiftshader
-  --ignore-gpu-blocklist
+  --use-gl=swiftshader          # software WebGL — no GPU required
+  --ignore-gpu-blocklist        # ignore hardware blocklist
+  --disable-gpu-sandbox         # allow SwiftShader in sandboxed environments (VMs, remote desktop)
   --disable-gpu-process-crash-limit
   --disable-background-timer-throttling
   --disable-backgrounding-occluded-windows
