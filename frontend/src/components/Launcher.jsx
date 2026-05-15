@@ -210,8 +210,8 @@ export default function Launcher({ onLaunchRviz }) {
             <ProcessCard 
               key={p.name} 
               proc={p} 
-              onStart={callApi} 
-              onStop={callApi} 
+              onStart={(name) => callApi(name, 'start')}
+              onStop={(name) => callApi(name, 'stop')} 
               onToggleLog={toggleLog} 
               isLogOpen={openLogs.has(p.name)} 
             />
