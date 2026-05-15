@@ -94,7 +94,7 @@ function NavStatus({ feedback, waypointTotal }) {
   );
 }
 
-export default function ControlPanel({ panelOpen = true }) {
+export default function ControlPanel({ panelOpen = true, panelWidth }) {
   const pose              = useRobotStore((s) => s.pose);
   const urdfStatus        = useRobotStore((s) => s.urdfStatus);
   const pointCount        = useRobotStore((s) => s.pointCount);
@@ -174,7 +174,7 @@ export default function ControlPanel({ panelOpen = true }) {
   const urdfOk = urdfStatus.startsWith('OK');
 
   return (
-    <div className={`panel ${panelOpen ? 'open' : ''}`}>
+    <div className={`panel ${panelOpen ? 'open' : ''}`} style={panelWidth ? { width: panelWidth } : undefined}>
       <div className="panel-scroll">
 
         {/* ── Navigation ── */}

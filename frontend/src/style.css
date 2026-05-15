@@ -950,6 +950,24 @@ input[type="range"]::-moz-range-thumb {
 .camera-capture-btn:active:not(:disabled) { transform: scale(0.97); }
 .camera-capture-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* ── Panel resize handle ──────────────────────────────────── */
+.panel-resize-handle {
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 12;
+  transition: background var(--fast);
+  touch-action: none;
+}
+.panel-resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: 0 -3px;   /* wider hit target than visual strip */
+}
+.panel-resize-handle:hover { background: var(--accent); opacity: 0.4; }
+
 /* ═══════════════════════════════════════════════════════════════
    RESPONSIVE — mobile drawer
 ═══════════════════════════════════════════════════════════════ */
@@ -978,6 +996,7 @@ input[type="range"]::-moz-range-thumb {
 @media (max-width: 768px) {
   :root { --panel-w: 305px; }
 
+  .panel-resize-handle { display: none; }
   .panel-toggle-btn { display: flex; }
 
   .panel {

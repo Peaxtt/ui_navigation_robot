@@ -36,7 +36,7 @@ function ArrowMarker({ index, x, y, yaw }) {
     ctx.arc(36, 36, 30, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = '#ff6b35';
+    ctx.strokeStyle = '#00D0B6';
     ctx.lineWidth = 3.5;
     ctx.beginPath();
     ctx.arc(36, 36, 28, 0, Math.PI * 2);
@@ -60,7 +60,7 @@ function ArrowMarker({ index, x, y, yaw }) {
       <mesh renderOrder={5}>
         <circleGeometry args={[0.47, 40]} />
         <meshBasicMaterial
-          color="#ff6b35" transparent opacity={0.10}
+          color="#00D0B6" transparent opacity={0.10}
           side={THREE.DoubleSide} depthTest={false}
         />
       </mesh>
@@ -69,7 +69,7 @@ function ArrowMarker({ index, x, y, yaw }) {
       <mesh renderOrder={5}>
         <circleGeometry args={[0.32, 40]} />
         <meshBasicMaterial
-          color="#ff6b35" transparent opacity={0.28}
+          color="#00D0B6" transparent opacity={0.28}
           side={THREE.DoubleSide} depthTest={false}
         />
       </mesh>
@@ -77,19 +77,19 @@ function ArrowMarker({ index, x, y, yaw }) {
       {/* Crisp ring outline */}
       <mesh renderOrder={6}>
         <ringGeometry args={[0.29, 0.34, 40]} />
-        <meshBasicMaterial color="#ff6b35" side={THREE.DoubleSide} depthTest={false} />
+        <meshBasicMaterial color="#00D0B6" side={THREE.DoubleSide} depthTest={false} />
       </mesh>
 
       {/* Arrow shaft — connects disc edge to arrowhead */}
       <mesh position={[0.46, 0, 0]} renderOrder={6}>
         <boxGeometry args={[0.26, 0.072, 0.004]} />
-        <meshBasicMaterial color="#ff6b35" depthTest={false} />
+        <meshBasicMaterial color="#00D0B6" depthTest={false} />
       </mesh>
 
       {/* Arrow head — flat ShapeGeometry triangle, tip at +X */}
       <mesh position={[0.62, 0, 0]} renderOrder={6}>
         <shapeGeometry args={[ARROW_HEAD_SHAPE]} />
-        <meshBasicMaterial color="#ff6b35" side={THREE.DoubleSide} depthTest={false} />
+        <meshBasicMaterial color="#00D0B6" side={THREE.DoubleSide} depthTest={false} />
       </mesh>
 
       {/* Number label sprite — floats above the marker */}
